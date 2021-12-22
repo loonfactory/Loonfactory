@@ -1,18 +1,18 @@
 ﻿// (c) 2021 loonfactory
 // This code is licensed under MIT license (see LICENSE.txt for details)
 //
-// This document was created by referring to IAuthenticateHandler.cs of dotnet/aspnetcore.
+// This document was created by referring to IAuthenticationHandler.cs of dotnet/aspnetcore.
 
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
+using System.Threading.Tasks;
 
-namespace Loonfactory.Translate
+namespace Loonfactory.Translate;
+
+/// <summary>
+/// Created per request to handle translate for a particular scheme.
+/// </summary>
+public interface ITranslateHandler
 {
-  /// <summary>
-  /// Created per request to handle translate for a particular scheme.
-  /// </summary>
-  public interface ITranslateHandler
-  {
     /// <summary>
     /// Initialize the transalted handler. The handler should initialize anything it needs from the request and scheme as part of this method.
     /// </summary>
@@ -25,5 +25,16 @@ namespace Loonfactory.Translate
     /// </summary>
     /// <returns>The <see cref="TranslateResult"/> result.</returns>
     Task<TranslateResult> TranslateAsync();
-  }
+
+    /// <summary>
+    /// Challenge the current request.
+    /// </summary>
+    /// <param name="properties">The <see cref="TranslateProperties"/> that contains the extra meta-data arriving with the translate.</param>
+    Task ChallengeAsync(TranslateProperties? properties);
+
+    /// <summary>
+    /// Forbid the current request.
+    /// </summary>
+    /// <param name="properties">The <see cref="TranslateProperties"/> that contains the extra meta-data arriving with the translate.</param>
+    Task ForbidAsync(TranslateProperties? properties);
 }

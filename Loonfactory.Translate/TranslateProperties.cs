@@ -5,15 +5,23 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text.Json.Serialization;
 
-namespace Loonfactory.Translate
+namespace Loonfactory.Translate;
+
+/// <summary>
+/// Dictionary used to store state values about the translate session.
+/// </summary>
+public class TranslateProperties
 {
-  /// <summary>
-  /// Dictionary used to store state values about the translate session.
-  /// </summary>
-  public class TranslateProperties
-  {
+    internal const string IssuedUtcKey = ".issued";
+    internal const string ExpiresUtcKey = ".expires";
+    internal const string IsPersistentKey = ".persistent";
+    internal const string RedirectUriKey = ".redirect";
+    internal const string RefreshKey = ".refresh";
+    internal const string UtcDateTimeFormat = "r";
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TranslateProperties"/> class.
     /// </summary>
@@ -37,8 +45,8 @@ namespace Loonfactory.Translate
     /// <param name="parameters">Parameters dictionary to use.</param>
     public TranslateProperties(IDictionary<string, string?>? items, IDictionary<string, object?>? parameters)
     {
-      Items = items ?? new Dictionary<string, string?>(StringComparer.Ordinal);
-      Parameters = parameters ?? new Dictionary<string, object?>(StringComparer.Ordinal);
+        Items = items ?? new Dictionary<string, string?>(StringComparer.Ordinal);
+        Parameters = parameters ?? new Dictionary<string, object?>(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -63,13 +71,63 @@ namespace Loonfactory.Translate
     public IDictionary<string, object?> Parameters { get; }
 
     /// <summary>
+    /// Gets or sets whether the authentication session is persisted across multiple requests.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsPersistent
+    {
+        get => GetString(IsPersistentKey) != null;
+        set => SetString(IsPersistentKey, value ? string.Empty : null);
+    }
+
+    /// <summary>
+    /// Gets or sets the full path or absolute URI to be used as an http redirect response value.
+    /// </summary>
+    [JsonIgnore]
+    public string? RedirectUri
+    {
+        get => GetString(RedirectUriKey);
+        set => SetString(RedirectUriKey, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the time at which the authentication ticket was issued.
+    /// </summary>
+    [JsonIgnore]
+    public DateTimeOffset? IssuedUtc
+    {
+        get => GetDateTimeOffset(IssuedUtcKey);
+        set => SetDateTimeOffset(IssuedUtcKey, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the time at which the authentication ticket expires.
+    /// </summary>
+    [JsonIgnore]
+    public DateTimeOffset? ExpiresUtc
+    {
+        get => GetDateTimeOffset(ExpiresUtcKey);
+        set => SetDateTimeOffset(ExpiresUtcKey, value);
+    }
+
+    /// <summary>
+    /// Gets or sets if refreshing the authentication session should be allowed.
+    /// </summary>
+    [JsonIgnore]
+    public bool? AllowRefresh
+    {
+        get => GetBool(RefreshKey);
+        set => SetBool(RefreshKey, value);
+    }
+
+    /// <summary>
     /// Get a string value from the <see cref="Items"/> collection.
     /// </summary>
     /// <param name="key">Property key.</param>
     /// <returns>Retrieved value or <c>null</c> if the property is not set.</returns>
     public string? GetString(string key)
     {
-      return Items.TryGetValue(key, out var value) ? value : null;
+        return Items.TryGetValue(key, out var value) ? value : null;
     }
 
     /// <summary>
@@ -79,14 +137,14 @@ namespace Loonfactory.Translate
     /// <param name="value">Value to set or <see langword="null" /> to remove the property.</param>
     public void SetString(string key, string? value)
     {
-      if (value != null)
-      {
-        Items[key] = value;
-      }
-      else
-      {
-        Items.Remove(key);
-      }
+        if (value != null)
+        {
+            Items[key] = value;
+        }
+        else
+        {
+            Items.Remove(key);
+        }
     }
 
     /// <summary>
@@ -114,11 +172,11 @@ namespace Loonfactory.Translate
     /// <returns>Retrieved value or <see langword="null" /> if the property is not set.</returns>
     protected bool? GetBool(string key)
     {
-      if (Items.TryGetValue(key, out var value) && bool.TryParse(value, out var boolValue))
-      {
-        return boolValue;
-      }
-      return null;
+        if (Items.TryGetValue(key, out var value) && bool.TryParse(value, out var boolValue))
+        {
+            return boolValue;
+        }
+        return null;
     }
 
     /// <summary>
@@ -128,14 +186,45 @@ namespace Loonfactory.Translate
     /// <param name="value">Value to set or <see langword="null" /> to remove the property.</param>
     protected void SetBool(string key, bool? value)
     {
-      if (value.HasValue)
-      {
-        Items[key] = value.GetValueOrDefault().ToString();
-      }
-      else
-      {
-        Items.Remove(key);
-      }
+        if (value.HasValue)
+        {
+            Items[key] = value.GetValueOrDefault().ToString();
+        }
+        else
+        {
+            Items.Remove(key);
+        }
     }
-  }
+
+    /// <summary>
+    /// Get a nullable <see cref="DateTimeOffset"/> value from the <see cref="Items"/> collection.
+    /// </summary>
+    /// <param name="key">Property key.</param>
+    /// <returns>Retrieved value or <see langword="null" /> if the property is not set.</returns>
+    protected DateTimeOffset? GetDateTimeOffset(string key)
+    {
+        if (Items.TryGetValue(key, out var value)
+            && DateTimeOffset.TryParseExact(value, UtcDateTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dateTimeOffset))
+        {
+            return dateTimeOffset;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Sets or removes a <see cref="DateTimeOffset" /> value in the <see cref="Items"/> collection.
+    /// </summary>
+    /// <param name="key">Property key.</param>
+    /// <param name="value">Value to set or <see langword="null" /> to remove the property.</param>
+    protected void SetDateTimeOffset(string key, DateTimeOffset? value)
+    {
+        if (value.HasValue)
+        {
+            Items[key] = value.GetValueOrDefault().ToString(UtcDateTimeFormat, CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            Items.Remove(key);
+        }
+    }
 }

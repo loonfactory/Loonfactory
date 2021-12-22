@@ -1,7 +1,7 @@
 ﻿// (c) 2021 loonfactory
 // This code is licensed under MIT license (see LICENSE.txt for details)
 //
-// This document was created by referring to AuthenticationHandler.cs of dotnet/aspnetcore.
+// This document was created by referring to AuthorizationHandler.cs of dotnet/aspnetcore.
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,14 +12,14 @@ using System;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
 
-namespace Loonfactory.Translate
+namespace Loonfactory.Translate;
+
+/// <summary>
+/// An opinionated abstraction for implementing <see cref="ITranslateHandler"/>.
+/// </summary>
+/// <typeparam name="TOptions">The type for the options used to configure the translate handler.</typeparam>
+public abstract class TranslateHandler<TOptions> : ITranslateHandler where TOptions : TranslateSchemeOptions, new()
 {
-  /// <summary>
-  /// An opinionated abstraction for implementing <see cref="ITranslateHandler"/>.
-  /// </summary>
-  /// <typeparam name="TOptions">The type for the options used to configure the translate handler.</typeparam>
-  public abstract class TranslateHandler<TOptions> : ITranslateHandler where TOptions : TranslateSchemeOptions, new()
-  {
     private Task<TranslateResult>? _translateTask;
 
     /// <summary>
@@ -42,7 +42,7 @@ namespace Loonfactory.Translate
     /// </summary>
     protected HttpRequest Request
     {
-      get => Context.Request;
+        get => Context.Request;
     }
 
     /// <summary>
@@ -50,7 +50,7 @@ namespace Loonfactory.Translate
     /// </summary>
     protected HttpResponse Response
     {
-      get => Context.Response;
+        get => Context.Response;
     }
 
     /// <summary>
@@ -59,7 +59,7 @@ namespace Loonfactory.Translate
     protected PathString OriginalPath => Context.Features.Get<ITranslateFeature>()?.OriginalPath ?? Request.Path;
 
     /// <summary>
-    /// Gets the path base as seen by the authentication middleware.
+    /// Gets the path base as seen by the translate middleware.
     /// </summary>
     protected PathString OriginalPathBase => Context.Features.Get<ITranslateFeature>()?.OriginalPathBase ?? Request.PathBase;
 
@@ -93,7 +93,7 @@ namespace Loonfactory.Translate
     /// Gets the issuer that should be used when any claims are issued.
     /// </summary>
     /// <value>
-    /// The <c>ClaimsIssuer</c> configured in <typeparamref name="TOptions"/>, if configured, otherwise <see cref="AuthenticationScheme.Name"/>.
+    /// The <c>ClaimsIssuer</c> configured in <typeparamref name="TOptions"/>, if configured, otherwise <see cref="TranslateScheme.Name"/>.
     /// </value>
     protected virtual string ClaimsIssuer => Options.ClaimsIssuer ?? Scheme.Name;
 
@@ -102,22 +102,22 @@ namespace Loonfactory.Translate
     /// </summary>
     protected string CurrentUri
     {
-      get => Request.Scheme + Uri.SchemeDelimiter + Request.Host + Request.PathBase + Request.Path + Request.QueryString;
+        get => Request.Scheme + Uri.SchemeDelimiter + Request.Host + Request.PathBase + Request.Path + Request.QueryString;
     }
 
     /// <summary>
-    /// Initializes a new instance of <see cref="AuthenticationHandler{TOptions}"/>.
+    /// Initializes a new instance of <see cref="TranslateHandler{TOptions}"/>.
     /// </summary>
     /// <param name="options">The monitor for the options instance.</param>
     /// <param name="logger">The <see cref="ILoggerFactory"/>.</param>
     /// <param name="encoder">The <see cref="System.Text.Encodings.Web.UrlEncoder"/>.</param>
     /// <param name="clock">The <see cref="ISystemClock"/>.</param>
-    protected AuthenticationHandler(IOptionsMonitor<TOptions> options, ILoggerFactory logger, UrlEncoder encoder, ISystemClock clock)
+    protected TranslateHandler(IOptionsMonitor<TOptions> options, ILoggerFactory logger, UrlEncoder encoder, ISystemClock clock)
     {
-      Logger = logger.CreateLogger(this.GetType().FullName!);
-      UrlEncoder = encoder;
-      Clock = clock;
-      OptionsMonitor = options;
+        Logger = logger.CreateLogger(this.GetType().FullName!);
+        UrlEncoder = encoder;
+        Clock = clock;
+        OptionsMonitor = options;
     }
 
     /// <summary>
@@ -128,22 +128,22 @@ namespace Loonfactory.Translate
     /// <returns></returns>
     public async Task InitializeAsync(TranslateScheme scheme, HttpContext context)
     {
-      if (scheme == null)
-      {
-        throw new ArgumentNullException(nameof(scheme));
-      }
-      if (context == null)
-      {
-        throw new ArgumentNullException(nameof(context));
-      }
+        if (scheme == null)
+        {
+            throw new ArgumentNullException(nameof(scheme));
+        }
+        if (context == null)
+        {
+            throw new ArgumentNullException(nameof(context));
+        }
 
-      Scheme = scheme;
-      Context = context;
+        Scheme = scheme;
+        Context = context;
 
-      Options = OptionsMonitor.Get(Scheme.Name);
+        Options = OptionsMonitor.Get(Scheme.Name);
 
-      await InitializeEventsAsync();
-      await InitializeHandlerAsync();
+        await InitializeEventsAsync();
+        await InitializeHandlerAsync();
     }
 
     /// <summary>
@@ -151,12 +151,12 @@ namespace Loonfactory.Translate
     /// </summary>
     protected virtual async Task InitializeEventsAsync()
     {
-      Events = Options.Events;
-      if (Options.EventsType != null)
-      {
-        Events = Context.RequestServices.GetRequiredService(Options.EventsType);
-      }
-      Events ??= await CreateEventsAsync();
+        Events = Options.Events;
+        if (Options.EventsType != null)
+        {
+            Events = Context.RequestServices.GetRequiredService(Options.EventsType);
+        }
+        Events ??= await CreateEventsAsync();
     }
 
     /// <summary>
@@ -171,47 +171,73 @@ namespace Loonfactory.Translate
     /// <returns>A task</returns>
     protected virtual Task InitializeHandlerAsync() => Task.CompletedTask;
 
-    public async Task<AuthenticateResult> AuthenticateAsync()
+    /// <summary>
+    /// Resolves the scheme that this translate operation is forwarded to.
+    /// </summary>
+    /// <param name="scheme">The scheme to forward. One of ForwardAuthenticate, ForwardChallenge, ForwardForbid, ForwardSignIn, or ForwardSignOut.</param>
+    /// <returns>The forwarded scheme or <see langword="null"/>.</returns>
+    protected virtual string? ResolveTarget(string? scheme)
     {
-      var target = ResolveTarget(Options.ForwardAuthenticate);
-      if (target != null)
-      {
-        return await Context.TranslateAsync(target);
-      }
+        var target = scheme ?? Options.ForwardDefaultSelector?.Invoke(Context) ?? Options.ForwardDefault;
 
-      // Calling Authenticate more than once should always return the original value.
-      var result = await HandleAuthenticateOnceAsync() ?? AuthenticateResult.NoResult();
-      if (result.Failure == null)
-      {
-        var ticket = result.Ticket;
-        if (ticket?.Principal != null)
+        // Prevent self targetting
+        return string.Equals(target, Scheme.Name, StringComparison.Ordinal)
+            ? null
+            : target;
+    }
+
+    /// <summary>
+    /// Constructs an absolute url for the specified <paramref name="targetPath"/>.
+    /// </summary>
+    /// <param name="targetPath">The path.</param>
+    /// <returns>The absolute url.</returns>
+    protected string BuildRedirectUri(string targetPath)
+        => Request.Scheme + Uri.SchemeDelimiter + Request.Host + OriginalPathBase + targetPath;
+
+
+
+    /// <inheritdoc />
+    public async Task<TranslateResult> TranslateAsync()
+    {
+        var target = ResolveTarget(Options.ForwardAuthenticate);
+        if (target != null)
         {
-          Logger.AuthenticationSchemeAuthenticated(Scheme.Name);
+            return await Context.TranslateAsync(target);
+        }
+
+        // Calling Authenticate more than once should always return the original value.
+        var result = await HandleAuthenticateOnceAsync() ?? TranslateResult.NoResult();
+        if (result.Failure == null)
+        {
+            var ticket = result.Ticket;
+            if (ticket?.Principal != null)
+            {
+                Logger.AuthenticationSchemeAuthenticated(Scheme.Name);
+            }
+            else
+            {
+                Logger.AuthenticationSchemeNotAuthenticated(Scheme.Name);
+            }
         }
         else
         {
-          Logger.AuthenticationSchemeNotAuthenticated(Scheme.Name);
+            Logger.AuthenticationSchemeNotAuthenticatedWithFailure(Scheme.Name, result.Failure.Message);
         }
-      }
-      else
-      {
-        Logger.AuthenticationSchemeNotAuthenticatedWithFailure(Scheme.Name, result.Failure.Message);
-      }
-      return result;
+        return result;
     }
 
     /// <summary>
     /// Used to ensure HandleAuthenticateAsync is only invoked once. The subsequent calls
     /// will return the same authenticate result.
     /// </summary>
-    protected Task<AuthenticateResult> HandleAuthenticateOnceAsync()
+    protected Task<TranslateResult> HandleAuthenticateOnceAsync()
     {
-      if (_authenticateTask == null)
-      {
-        _authenticateTask = HandleAuthenticateAsync();
-      }
+        if (_translateTask == null)
+        {
+            _translateTask = HandleAuthenticateAsync();
+        }
 
-      return _authenticateTask;
+        return _translateTask;
     }
 
     /// <summary>
@@ -219,62 +245,75 @@ namespace Loonfactory.Translate
     /// calls will return the same authentication result. Any exceptions will be converted
     /// into a failed authentication result containing the exception.
     /// </summary>
-    protected async Task<AuthenticateResult> HandleAuthenticateOnceSafeAsync()
+    protected async Task<TranslateResult> HandleAuthenticateOnceSafeAsync()
     {
-      try
-      {
-        return await HandleAuthenticateOnceAsync();
-      }
-      catch (Exception ex)
-      {
-        return AuthenticateResult.Fail(ex);
-      }
+        try
+        {
+            return await HandleAuthenticateOnceAsync();
+        }
+        catch (Exception ex)
+        {
+            return TranslateResult.Fail(ex);
+        }
     }
 
     /// <summary>
-    /// Allows derived types to handle authentication.
+    /// Allows derived types to handle translate.
     /// </summary>
-    /// <returns>The <see cref="AuthenticateResult"/>.</returns>
-    protected abstract Task<AuthenticateResult> HandleAuthenticateAsync();
+    /// <returns>The <see cref="TranslateResult"/>.</returns>
+    protected abstract Task<TranslateResult> HandleAuthenticateAsync();
 
     /// <summary>
     /// Override this method to handle Forbid.
     /// </summary>
     /// <param name="properties"></param>
     /// <returns>A Task.</returns>
-    protected virtual Task HandleForbiddenAsync(AuthenticationProperties properties)
+    protected virtual Task HandleForbiddenAsync(TranslateProperties properties)
     {
-      Response.StatusCode = 403;
-      return Task.CompletedTask;
+        Response.StatusCode = 403;
+        return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Override this method to deal with 401 challenge concerns, if an authentication scheme in question
-    /// deals an authentication interaction as part of it's request flow. (like adding a response header, or
+    /// Override this method to deal with 401 challenge concerns, if an translate scheme in question
+    /// deals an translate interaction as part of it's request flow. (like adding a response header, or
     /// changing the 401 result to 302 of a login page or external sign-in location.)
     /// </summary>
     /// <param name="properties"></param>
     /// <returns>A Task.</returns>
-    protected virtual Task HandleChallengeAsync(AuthenticationProperties properties)
+    protected virtual Task HandleChallengeAsync(TranslateProperties properties)
     {
-      Response.StatusCode = 401;
-      return Task.CompletedTask;
+        Response.StatusCode = 401;
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
-    public async Task ChallengeAsync(AuthenticationProperties? properties)
+    public async Task ChallengeAsync(TranslateProperties? properties)
     {
-      var target = ResolveTarget(Options.ForwardChallenge);
-      if (target != null)
-      {
-        await Context.ChallengeAsync(target, properties);
-        return;
-      }
+        var target = ResolveTarget(Options.ForwardChallenge);
+        if (target != null)
+        {
+            await Context.ChallengeAsync(target, properties);
+            return;
+        }
 
-      properties ??= new AuthenticationProperties();
-      await HandleChallengeAsync(properties);
-      Logger.AuthenticationSchemeChallenged(Scheme.Name);
+        properties ??= new TranslateProperties();
+        await HandleChallengeAsync(properties);
+        Logger.AuthenticationSchemeChallenged(Scheme.Name);
     }
 
-  }
+    /// <inheritdoc />
+    public async Task ForbidAsync(TranslateProperties? properties)
+    {
+        var target = ResolveTarget(Options.ForwardForbid);
+        if (target != null)
+        {
+            await Context.ForbidAsync(target, properties);
+            return;
+        }
+
+        properties ??= new TranslateProperties();
+        await HandleForbiddenAsync(properties);
+        Logger.AuthenticationSchemeForbidden(Scheme.Name);
+    }
 }
